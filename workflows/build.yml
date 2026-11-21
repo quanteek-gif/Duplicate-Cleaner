@@ -1,0 +1,161 @@
+name: build
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-rust:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux dependencies (Tauri)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev libxdo-dev libssl-dev
+      - name: Unit + integration tests
+        working-directory: src-tauri
+        run: cargo test --all-targets
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Formatting
+        working-directory: src-tauri
+        run: cargo fmt --check
+
+  test-frontend:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Unit tests (vitest)
+        run: npm test
+      - name: Type-check + build
+        run: npm run build
+
+  build-windows:
+    needs: [test-rust, test-frontend]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: Build installers
+        run: npm run tauri:build
+      # Guards against building without `custom-protocol`: such a binary points
+      # the webview at http://localhost:1420 and shows "Could not connect to
+      # localhost" instead of the embedded UI. The hashed asset name emitted by
+      # Vite only exists inside a properly embedded bundle.
+      - name: Verify the app bundle is embedded
+        shell: pwsh
+        run: |
+          $exe = "src-tauri/target/release/duplicate-cleaner.exe"
+          if (-not (Test-Path $exe)) { throw "release binary not found: $exe" }
+
+          $asset = Get-ChildItem dist/assets -Filter "index-*.js" |
+                   Select-Object -First 1
+          if (-not $asset) { throw "no built asset in dist/assets - run npm run build" }
+
+          $text = [System.Text.Encoding]::ASCII.GetString(
+                    [System.IO.File]::ReadAllBytes($exe))
+          if (-not $text.Contains($asset.Name)) {
+            throw "embedded bundle missing: $($asset.Name) not found in the binary"
+          }
+          Write-Host "embedded bundle check passed: $($asset.Name)"
+      - name: Install and uninstall both installers
+        shell: pwsh
+        run: ./scripts/verify-windows-install.ps1
+      - name: Upload NSIS installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: duplicate-cleaner-nsis
+          path: src-tauri/target/release/bundle/nsis/*.exe
+      - name: Upload MSI installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: duplicate-cleaner-msi
+          path: src-tauri/target/release/bundle/msi/*.msi
+      - name: Upload portable exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: duplicate-cleaner-exe
+          path: src-tauri/target/release/duplicate-cleaner.exe
+
+  build-linux:
+    needs: [test-rust, test-frontend]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install Linux dependencies (Tauri)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev libxdo-dev libssl-dev
+      - run: npm ci
+      - name: Build frontend
+        run: npm run build
+      - name: Build release binary
+        run: cargo build --release --features custom-protocol --manifest-path src-tauri/Cargo.toml
+      # Same guard as the Windows job: a binary built without `custom-protocol`
+      # points the webview at http://localhost:1420 and shows "Could not connect
+      # to localhost". The hashed asset name only exists in an embedded bundle.
+      - name: Verify the app bundle is embedded
+        run: |
+          bin=src-tauri/target/release/duplicate-cleaner
+          if [ ! -x "$bin" ]; then echo "release binary not found: $bin"; exit 1; fi
+          asset=$(basename "$(find dist/assets -name 'index-*.js' -print -quit)")
+          if [ -z "$asset" ]; then echo "no built asset in dist/assets"; exit 1; fi
+          if ! grep -qaF "$asset" "$bin"; then
+            echo "embedded bundle missing: $asset not found in the binary"
+            exit 1
+          fi
+          echo "embedded bundle check passed: $asset"
+      - name: Build .deb
+        run: npx tauri bundle --bundles deb
+      - name: Upload .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: duplicate-cleaner-deb
+          path: src-tauri/target/release/bundle/deb/*.deb
+
+  release:
+    needs: [build-windows, build-linux]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download installers
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Publish draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: artifacts/**/*

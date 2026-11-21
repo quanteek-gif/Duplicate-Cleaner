@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+   Base — Windows 11 inspired dark theme
+   --------------------------------------------------------------------------- */
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-surface-0 text-text-primary;
+    margin: 0;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #33363d transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: #33363d;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: #43474f;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  input,
+  textarea {
+    user-select: text;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Components / effects
+   --------------------------------------------------------------------------- */
+@layer components {
+  .drag-region {
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+
+  .glass {
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.035) 0%,
+      rgba(255, 255, 255, 0.012) 100%
+    );
+    backdrop-filter: blur(20px);
+  }
+
+  .card {
+    @apply rounded-xl2 border border-line-soft bg-surface-2;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.03) inset,
+      0 10px 30px -18px rgba(0, 0, 0, 0.7);
+  }
+
+  .card-hover {
+    transition:
+      border-color 160ms ease,
+      transform 160ms ease,
+      background-color 160ms ease,
+      box-shadow 160ms ease;
+  }
+  .card-hover:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    background-color: #1f2126;
+  }
+
+  .focus-ring:focus-visible {
+    outline: 2px solid #4f8cff;
+    outline-offset: 2px;
+  }
+
+  .progress-indeterminate {
+    position: relative;
+  }
+  .progress-indeterminate::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(90deg, transparent, #4f8cff, transparent);
+    animation: indeterminate 1.4s ease-in-out infinite;
+  }
+}

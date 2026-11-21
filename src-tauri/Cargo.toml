@@ -1,0 +1,98 @@
+[package]
+name = "duplicate-cleaner"
+version = "1.0.0"
+description = "Duplicate Cleaner — find, inspect and safely remove duplicate files"
+authors = ["Duplicate Cleaner"]
+edition = "2021"
+rust-version = "1.80"
+
+# The `_lib` suffix is required for Tauri 2 so the library and binary name
+# do not clash on Windows.
+[lib]
+name = "duplicate_cleaner_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+
+# Parallelism
+rayon = "1"
+
+# Filesystem traversal
+walkdir = "2"
+
+# Hashing
+sha2 = "0.10"
+
+# Persistence
+rusqlite = { version = "0.43", features = ["bundled"] }
+
+# Recycle bin (Windows) / freedesktop trash (Linux, for development)
+trash = "5"
+
+# Image decoding & thumbnails
+image = { version = "0.25", default-features = false, features = [
+    "jpeg",
+    "png",
+    "gif",
+    "webp",
+    "bmp",
+    "tiff",
+] }
+base64 = "0.23"
+
+# System information (drives, memory)
+sysinfo = "0.40"
+
+# Shell integration
+open = "5"
+
+# Errors, logging, ids
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+uuid = { version = "1", features = ["v4", "v5"] }
+dirs = "7"
+
+[dev-dependencies]
+tempfile = "3"
+
+# ---------------------------------------------------------------------------
+# Features
+# ---------------------------------------------------------------------------
+# `custom-protocol` is what switches Tauri from "load `devUrl` over HTTP" to
+# "serve the bundle embedded with `generate_context!`". Without it every build —
+# including `cargo build --release` — points the webview at localhost:1420 and
+# shows "Connection refused" when the Vite dev server is not running.
+# `tauri dev` leaves the feature off on purpose, `tauri build` turns it on.
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
+# ---------------------------------------------------------------------------
+# Release profile: small, fast, self-contained binary
+# ---------------------------------------------------------------------------
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+
+[profile.dev]
+# Keep debug builds usable while scanning large folders.
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2
